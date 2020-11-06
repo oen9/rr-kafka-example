@@ -8,6 +8,7 @@ import zio.kafka.consumer._
 import zio.kafka.consumer.Consumer
 import zio.kafka.producer.Producer
 import zio.kafka.serde._
+import zio.logging._
 
 object requesthandler {
   type RequestHandler = Has[RequestHandler.Service]
@@ -21,8 +22,9 @@ object requesthandler {
 
     def startResponseConsumer(reqCorrs: Ref[Seq[ReqCorr]]) = {
       def findReqPred(corr: ReqCorr, cr: CommittableRecord[String, HelloData]) = corr.id == cr.record.value().key
-      def handleResponse(reqCorrs: Ref[Seq[ReqCorr]], cr: CommittableRecord[String, HelloData]): Task[Unit] =
+      def handleResponse(reqCorrs: Ref[Seq[ReqCorr]], cr: CommittableRecord[String, HelloData]) =
         for {
+          _     <- log.info(s"Received message '${cr.record}'")
           corrs <- reqCorrs.get
           _ <- corrs
             .find(findReqPred(_, cr))
@@ -46,14 +48,15 @@ object requesthandler {
         Producer.Service[Any, String, HelloData],
         Blocking.Service,
         Consumer.Service,
-        Clock with Blocking with Consumer,
+        Logger[String],
+        Clock with Blocking with Consumer with Logging,
         Throwable,
         RequestHandler.Service
-      ] { (producer, blocking, consumer) =>
+      ] { (producer, blocking, consumer, logger) =>
         for {
           reqCorrs <- Ref.make(Seq[ReqCorr]())
           _        <- startResponseConsumer(reqCorrs)
-        } yield new RequestHandlerLive(producer, blocking, consumer, reqCorrs)
+        } yield new RequestHandlerLive(producer, blocking, consumer, reqCorrs, logger)
       }
   }
 

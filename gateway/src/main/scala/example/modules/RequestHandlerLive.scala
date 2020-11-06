@@ -8,13 +8,15 @@ import zio._
 import zio.blocking.Blocking
 import zio.kafka.consumer.Consumer
 import zio.kafka.producer.Producer
+import zio.logging.Logger
 import zio.Promise
 
 class RequestHandlerLive(
   producer: Producer.Service[Any, String, HelloData],
   blocking: Blocking.Service,
   consumer: Consumer.Service,
-  reqCorrs: Ref[Seq[ReqCorr]]
+  reqCorrs: Ref[Seq[ReqCorr]],
+  logger: Logger[String]
 ) extends RequestHandler.Service {
 
   val consLayers     = ZLayer.succeed(consumer) ++ ZLayer.succeed(blocking)
@@ -30,6 +32,8 @@ class RequestHandlerLive(
 
       targetPartition = partitions.map(_.partition()).headOption.getOrElse(-1)
       request         = HelloData(targetPartition, newUUID, param)
+
+      _ <- logger.info(s"Sending message '$request' to topic '$REQUEST_TOPIC'")
       _ <- Producer
         .produceAsync[Any, String, HelloData](REQUEST_TOPIC, null, request)
         .provideLayer(prodLayers)

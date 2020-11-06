@@ -17,11 +17,11 @@ import zio._
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.config._
-import zio.console._
 import zio.duration._
 import zio.interop.catz._
 import zio.kafka.consumer._
 import zio.kafka.producer._
+import zio.logging._
 
 object Hello extends App {
   type AppEnv = ZEnv
@@ -29,16 +29,19 @@ object Hello extends App {
     with Producer[Any, String, HelloData]
     with Consumer
     with RequestHandler
+    with Logging
   type AppTask[A] = ZIO[AppEnv, Throwable, A]
 
   override def run(args: List[String]): URIO[ZEnv, ExitCode] =
     app().provideCustomLayer {
       val appCfg     = Config.load
+      val logging    = slf4j.Slf4jLogger.make((_, msg) => msg)
       val kafkaProd  = appCfg >>> kafkaProducer.live
       val kafkaCons  = (Blocking.any ++ Clock.any ++ appCfg) >>> kafkaConsumer.live
-      val reqHandler = (Blocking.any ++ Clock.any ++ kafkaCons ++ kafkaProd) >>> RequestHandler.live
+      val reqHandler = (Blocking.any ++ Clock.any ++ kafkaCons ++ kafkaProd ++ logging) >>> RequestHandler.live
 
       appCfg ++
+        logging ++
         kafkaProd ++
         kafkaCons ++
         reqHandler
@@ -46,7 +49,7 @@ object Hello extends App {
 
   def app(): ZIO[AppEnv, Throwable, Unit] =
     for {
-      _   <- putStrLn("Hello, world!")
+      _   <- log.info("gateway started")
       cfg <- getConfig[AppConfig]
 
       originConfig = CORSConfig(anyOrigin = true, allowCredentials = false, maxAge = 1.day.toSeconds)

@@ -1,1 +1,16 @@
-docker-compose up -d --scale kafka=3 zookeeper kafka 
+docker-compose up -d --scale kafka=3 zookeeper kafka
+
+minikube start --cpus=4 --memory=6144
+eval $(minikube docker-env)
+sbt docker:publishLocal
+
+kubectl apply -f kubernetes/kafka.yaml
+minikube dashboard # wait for kafka and zoo
+kubectl apply -f kubernetes/app.yaml
+minikube service gateway-service
+
+minikube ip
+http http://192.168.99.109:30825/rr/hello
+
+minikube stop
+minikube delete --all
